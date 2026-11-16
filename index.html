@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Patternsmith — Laser Pattern Maker</title>
+<style>
+:root{
+  --bg:#f3efe7; --panel:#fbf9f5; --ink:#24211d; --muted:#7a7268; --line:#e2dcd1;
+  --accent:#c2410c; --accent-soft:#fde7d9; --ok:#2f7d4f; --warn:#b45309;
+  --wood:#d8b98a; --bed:#2b2926;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.4 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{display:flex;align-items:baseline;gap:12px;padding:14px 18px 6px;flex-wrap:wrap}
+header h1{margin:0;font-size:20px;letter-spacing:.3px}
+header h1 span{color:var(--accent)}
+header p{margin:0;color:var(--muted);font-size:13px}
+.app{display:grid;grid-template-columns:350px 1fr;gap:14px;padding:8px 14px 20px;align-items:start}
+.controls{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:6px 12px 12px;max-height:calc(100vh - 80px);overflow:auto}
+.stage{position:sticky;top:10px;display:flex;flex-direction:column;gap:10px}
+.preview{background:var(--bed);border-radius:12px;padding:16px;display:flex;align-items:center;justify-content:center;min-height:300px;height:calc(100vh - 210px)}
+.preview.cutview{background:#fff;border:1px solid var(--line)}
+.preview svg{max-width:100%;max-height:100%;width:auto;height:auto;display:block}
+section{border-bottom:1px solid var(--line);padding:10px 0}
+section:last-child{border-bottom:none}
+section h2{font-size:11px;text-transform:uppercase;letter-spacing:1.2px;color:var(--muted);margin:0 0 8px}
+.row{display:grid;grid-template-columns:120px 1fr;align-items:center;gap:8px;margin:6px 0}
+.row label{color:#4a443d;font-size:13px}
+.row .pair{display:flex;gap:8px;align-items:center}
+input[type=number],select{width:100%;padding:6px 8px;border:1px solid var(--line);border-radius:7px;background:#fff;font:inherit;color:var(--ink)}
+input[type=number]{max-width:90px}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.rng{display:flex;gap:8px;align-items:center}
+.rng output{min-width:42px;text-align:right;font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px}
+.chk{display:flex;gap:8px;align-items:center;margin:6px 0;font-size:13px}
+.btns{display:flex;flex-wrap:wrap;gap:8px}
+button{font:inherit;border:1px solid var(--line);background:#fff;color:var(--ink);padding:8px 12px;border-radius:8px;cursor:pointer}
+button:hover{border-color:#cbbfae}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+button.primary:hover{filter:brightness(1.05)}
+.presets{display:flex;flex-wrap:wrap;gap:6px}
+.presets button{padding:5px 9px;font-size:12px;border-radius:999px;background:var(--accent-soft);border-color:transparent;color:#7c2d12}
+.stats{display:flex;flex-wrap:wrap;gap:8px 18px;background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 14px;font-size:13px}
+.stats b{font-variant-numeric:tabular-nums}
+.badge{display:inline-flex;align-items:center;gap:6px;color:var(--ok);font-weight:600}
+.badge.warn{color:var(--warn)}
+.toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;justify-content:space-between}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;overflow:hidden;background:#fff}
+.seg button{border:none;border-radius:0;padding:7px 12px}
+.seg button.on{background:var(--ink);color:#fff}
+.note{font-size:12px;color:var(--muted);margin:4px 0 0}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:9px 14px;border-radius:8px;font-size:13px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:9}
+.toast.show{opacity:1}
+[hidden]{display:none!important}
+@media (max-width:860px){
+  .app{grid-template-columns:1fr}
+  .stage{order:-1;position:sticky;top:0;z-index:5;background:var(--bg);padding-bottom:6px}
+  .preview{height:42vh;min-height:220px;padding:10px}
+  .controls{max-height:none}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>Pattern<span>smith</span></h1>
+  <p>Laser-ready SVG patterns. Every cut stays at least one “gap” away from every other cut and from the outline.</p>
+</header>
+
+<div class="app">
+  <div class="controls" id="controls">
+    <section>
+      <h2>Presets</h2>
+      <div class="presets" id="presets"></div>
+    </section>
+
+    <section>
+      <h2>Piece</h2>
+      <div class="row"><label>Outline</label>
+        <select data-k="panel">
+          <option value="rect">Rectangle</option>
+          <option value="circle">Circle</option>
+          <option value="hexagon">Hexagon</option>
+          <option value="octagon">Octagon</option>
+          <option value="triangle">Triangle</option>
+          <option value="pentagon">Pentagon</option>
+          <option value="none">None (pattern only)</option>
+        </select></div>
+      <div class="row" data-panel="rect none"><label>Width × height</label>
+        <div class="pair"><input type="number" data-k="pw" value="300" min="10" step="1"><span>×</span><input type="number" data-k="ph" value="200" min="10" step="1"></div></div>
+      <div class="row" data-panel="circle hexagon octagon triangle pentagon"><label id="pdLabel">Diameter</label>
+        <input type="number" data-k="pd" value="150" min="10" step="1"></div>
+      <div class="row" data-panel="rect triangle pentagon"><label>Corner radius</label>
+        <input type="number" data-k="pr" value="6" min="0" step="0.5"></div>
+      <div class="row"><label>Border margin</label>
+        <input type="number" data-k="margin" value="8" min="0" step="0.5"></div>
+      <p class="note" id="marginNote" hidden></p>
+    </section>
+
+    <section>
+      <h2>Layout</h2>
+      <div class="row"><label>Arrangement</label>
+        <select data-k="layout">
+          <option value="grid">Square grid</option>
+          <option value="hex">Offset (hex) grid</option>
+          <option value="radial">Radial rings (mandala)</option>
+          <option value="spiral">Sunflower spiral</option>
+          <option value="scatter">Random scatter</option>
+          <option value="cells">Cells (honeycomb / Voronoi)</option>
+        </select></div>
+      <div class="row" data-layout="cells"><label>Cell seeds</label>
+        <select data-k="cellSeed">
+          <option value="hex">Hex → honeycomb</option>
+          <option value="square">Square → tiles</option>
+          <option value="tri">Triangles</option>
+          <option value="random">Random → organic</option>
+        </select></div>
+      <div class="row" data-layout="cells"><label>Cell size</label>
+        <input type="number" data-k="cellSize" value="20" min="3" step="0.5"></div>
+      <div class="row" data-layout="cells"><label>Jitter</label>
+        <div class="rng"><input type="range" data-k="jitter" min="0" max="100" value="0"><output></output></div></div>
+      <div class="row" data-layout="cells"><label>Corner rounding</label>
+        <input type="number" data-k="round" value="2" min="0" step="0.5"></div>
+      <div class="row" data-layout="cells"><label>Drop slivers under</label>
+        <div class="rng"><input type="range" data-k="minCell" min="0" max="90" value="30"><output></output></div></div>
+      <div class="row" data-layout="grid hex radial spiral"><label>Extra spacing</label>
+        <input type="number" data-k="extra" value="0" min="0" step="0.5"></div>
+      <div class="row" data-layout="radial"><label>Ring twist</label>
+        <div class="rng"><input type="range" data-k="twist" min="0" max="60" value="0"><output></output></div></div>
+      <div class="row" data-layout="spiral"><label>Spiral tightness</label>
+        <div class="rng"><input type="range" data-k="spiralK" min="40" max="120" value="58"><output></output></div></div>
+      <div class="row" data-layout="scatter"><label>Fill density</label>
+        <div class="rng"><input type="range" data-k="density" min="1" max="20" value="8"><output></output></div></div>
+    </section>
+
+    <section data-layout="grid hex radial spiral scatter">
+      <h2>Elements</h2>
+      <div class="row"><label>Shape</label>
+        <select data-k="shape">
+          <option value="circle">Circle</option>
+          <option value="hexagon">Hexagon</option>
+          <option value="square">Square</option>
+          <option value="triangle">Triangle</option>
+          <option value="diamond">Diamond</option>
+          <option value="octagon">Octagon</option>
+          <option value="star">Star (5)</option>
+          <option value="star6">Star (6)</option>
+          <option value="heart">Heart</option>
+          <option value="teardrop">Teardrop</option>
+          <option value="leaf">Leaf</option>
+          <option value="slot">Slot</option>
+          <option value="cross">Cross</option>
+          <option value="moon">Crescent</option>
+        </select></div>
+      <div class="row"><label>Size</label>
+        <input type="number" data-k="size" value="14" min="0.5" step="0.5"></div>
+      <p class="note">Size = diameter of the circle the shape fits inside (the starting size when “Enlarge to fill” is on). Spacing is checked against that circle, so any rotation is safe.</p>
+      <div class="row"><label>Rotation</label>
+        <select data-k="rotMode">
+          <option value="fixed">Fixed angle</option>
+          <option value="radial">Point outward</option>
+          <option value="alternate">Alternate flip</option>
+          <option value="random">Random</option>
+        </select></div>
+      <div class="row"><label>Angle</label>
+        <div class="rng"><input type="range" data-k="angle" min="0" max="360" value="0"><output></output></div></div>
+      <div class="row"><label>Smallest allowed</label>
+        <input type="number" data-k="minFeat" value="2" min="0" step="0.5"></div>
+    </section>
+
+    <section>
+      <h2>Spacing</h2>
+      <div class="row"><label>Gap (min bridge)</label>
+        <input type="number" data-k="gap" value="2.5" min="0.2" step="0.1"></div>
+      <div class="row"><label>Laser kerf</label>
+        <input type="number" data-k="kerf" value="0.15" min="0" step="0.01"></div>
+      <p class="note">The gap is measured between cut lines. Real wood left between holes ≈ gap − kerf.</p>
+    </section>
+
+    <section>
+      <h2>Size variation</h2>
+      <div class="row"><label>Mode</label>
+        <select data-k="vary">
+          <option value="none">None</option>
+          <option value="linear">Linear gradient</option>
+          <option value="radial">Radial (center → edge)</option>
+          <option value="wave">Waves</option>
+          <option value="noise">Organic noise</option>
+          <option value="random">Random</option>
+        </select></div>
+      <div data-vary="linear radial wave noise random">
+        <div class="row"><label>Smallest size</label>
+          <div class="rng"><input type="range" data-k="minScale" min="5" max="100" value="35"><output></output></div></div>
+        <div class="row" data-vary="linear wave"><label>Direction</label>
+          <div class="rng"><input type="range" data-k="gradAngle" min="0" max="360" value="0"><output></output></div></div>
+        <div class="row" data-vary="wave noise"><label>Wavelength</label>
+          <input type="number" data-k="wavelen" value="120" min="10" step="5"></div>
+        <label class="chk"><input type="checkbox" data-k="invert"> Invert</label>
+      </div>
+    </section>
+
+    <section>
+      <h2>Randomness & output</h2>
+      <div class="row"><label>Seed</label>
+        <div class="pair"><input type="number" data-k="seed" value="7" step="1"><button id="reroll" type="button">🎲 New</button></div></div>
+      <label class="chk"><input type="checkbox" data-k="fill" checked> Enlarge elements to fill the piece</label>
+      <label class="chk"><input type="checkbox" data-k="cutOutline" checked> Cut the outline (blue, cut last)</label>
+      <div class="row"><label>Cut speed</label>
+        <div class="pair"><input type="number" data-k="speed" value="20" min="1" step="1"><span class="note" style="margin:0">mm/s (for time estimate)</span></div></div>
+    </section>
+  </div>
+
+  <div class="stage">
+    <div class="toolbar">
+      <div class="seg" id="viewSeg">
+        <button data-view="material" class="on">Material</button>
+        <button data-view="cut">Cut lines</button>
+      </div>
+      <div class="btns">
+        <button id="copyBtn">Copy SVG</button>
+        <button id="dlBtn" class="primary" hidden>Download SVG</button>
+      </div>
+    </div>
+    <div class="preview" id="preview"></div>
+    <div class="stats" id="stats"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+(()=>{
+const TAU=Math.PI*2, D2R=Math.PI/180;
+const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
+function mulberry32(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
+const f=n=>(Math.round(n*1000)/1000).toString();
+
+/* ---------- unit shapes (circumradius normalized to 1) ---------- */
+function regular(n,start){const p=[];for(let i=0;i<n;i++){const a=start+i*TAU/n;p.push([Math.cos(a),Math.sin(a)])}return p}
+function normalize(pts){
+  let minx=1e9,maxx=-1e9,miny=1e9,maxy=-1e9;
+  for(const[x,y]of pts){minx=Math.min(minx,x);maxx=Math.max(maxx,x);miny=Math.min(miny,y);maxy=Math.max(maxy,y)}
+  const cx=(minx+maxx)/2,cy=(miny+maxy)/2;let r=0;
+  for(const[x,y]of pts)r=Math.max(r,Math.hypot(x-cx,y-cy));
+  return pts.map(([x,y])=>[(x-cx)/r,(y-cy)/r]);
+}
+const SHAPES={
+  hexagon:()=>regular(6,0),
+  square:()=>regular(4,Math.PI/4),
+  triangle:()=>regular(3,-Math.PI/2),
+  diamond:()=>normalize([[0,-1],[0.62,0],[0,1],[-0.62,0]]),
+  octagon:()=>regular(8,Math.PI/8),
+  star:()=>{const p=[];for(let i=0;i<10;i++){const a=-Math.PI/2+i*Math.PI/5,r=i%2?0.42:1;p.push([r*Math.cos(a),r*Math.sin(a)])}return p},
+  star6:()=>{const p=[];for(let i=0;i<12;i++){const a=-Math.PI/2+i*Math.PI/6,r=i%2?0.55:1;p.push([r*Math.cos(a),r*Math.sin(a)])}return p},
+  heart:()=>{const p=[];for(let i=0;i<72;i++){const t=i/72*TAU;p.push([16*Math.sin(t)**3,-(13*Math.cos(t)-5*Math.cos(2*t)-2*Math.cos(3*t)-Math.cos(4*t))])}return normalize(p)},
+  teardrop:()=>{const p=[];for(let i=0;i<64;i++){const t=i/64*TAU;p.push([0.62*Math.sin(t)*Math.sin(t/2),-Math.cos(t)])}return normalize(p)},
+  leaf:()=>{const p=[];for(let i=0;i<=24;i++){const x=-1+i/12;p.push([x,-0.42*(1-x*x)])}for(let i=23;i>0;i--){const x=-1+i/12;p.push([x,0.42*(1-x*x)])}return normalize(p).map(([x,y])=>[y,x])},
+  cross:()=>{const a=0.3,b=0.95;return normalize([[-a,-b],[a,-b],[a,-a],[b,-a],[b,a],[a,a],[a,b],[-a,b],[-a,a],[-b,a],[-b,-a],[-a,-a]])},
+  moon:()=>{const p=[];const N=40;for(let i=0;i<=N;i++){const a=Math.PI/2+i/N*Math.PI;p.push([Math.cos(a),Math.sin(a)])}
+    // inner arc: circle centered at (-0.35,0) radius chosen to hit (0,±1)
+    const c=-0.42,R=Math.hypot(c,1),a0=Math.atan2(-1,-c),a1=Math.atan2(1,-c);
+    for(let i=1;i<N;i++){const a=a0+(a1-a0)*i/N;p.push([c+R*Math.cos(a),R*Math.sin(a)])}
+    return normalize(p)}
+};
+// slot built separately (stadium) to keep it readable
+SHAPES.slot=()=>{const p=[],w=0.32,L=1-w;
+  for(let i=0;i<=16;i++){const a=Math.PI+i*Math.PI/16;p.push([w*Math.cos(a),-L+w*Math.sin(a)])}
+  for(let i=0;i<=16;i++){const a=i*Math.PI/16;p.push([w*Math.cos(a),L+w*Math.sin(a)])}
+  return normalize(p)};
+const shapeCache={};
+function unitShape(k){return shapeCache[k]||(shapeCache[k]=SHAPES[k]())}
+
+/* ---------- params ---------- */
+function readParams(){const p={};for(const el of $$('[data-k]')){const k=el.dataset.k;
+  p[k]=el.type==='checkbox'?el.checked:(el.type==='number'||el.type==='range')?(parseFloat(el.value)||0):el.value}return p}
+function setParams(o){for(const[k,v]of Object.entries(o)){const el=$(`[data-k="${k}"]`);if(!el)continue;if(el.type==='checkbox')el.checked=!!v;else el.value=v}}
+
+/* ---------- panel geometry (convex polygon + inward half-planes) ---------- */
+function halfplanes(poly){
+  let cx=0,cy=0;for(const[x,y]of poly){cx+=x;cy+=y}cx/=poly.length;cy/=poly.length;
+  const hs=[];
+  for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length];
+    let nx=-(b[1]-a[1]),ny=b[0]-a[0];const L=Math.hypot(nx,ny);if(L<1e-9)continue;nx/=L;ny/=L;
+    if(nx*(cx-a[0])+ny*(cy-a[1])<0){nx=-nx;ny=-ny}
+    hs.push({nx,ny,c:nx*a[0]+ny*a[1]})}
+  return hs;
+}
+function buildPanel(p){
+  const t=p.panel;let W,H,poly=[],outline='';
+  if(t==='rect'||t==='none'){
+    W=Math.max(10,p.pw);H=Math.max(10,p.ph);const rc=t==='rect'?Math.max(0,Math.min(p.pr,W/2,H/2)):0;
+    if(rc<=0.01){poly=[[0,0],[W,0],[W,H],[0,H]];outline=`<rect x="0" y="0" width="${f(W)}" height="${f(H)}"/>`}
+    else{const cs=[[W-rc,rc,-90],[W-rc,H-rc,0],[rc,H-rc,90],[rc,rc,180]];
+      for(const[cx,cy,a0]of cs)for(let i=0;i<=12;i++){const a=(a0+i*90/12)*D2R;poly.push([cx+rc*Math.cos(a),cy+rc*Math.sin(a)])}
+      outline=`<rect x="0" y="0" width="${f(W)}" height="${f(H)}" rx="${f(rc)}" ry="${f(rc)}"/>`}
+  }else if(t==='circle'){W=H=Math.max(10,p.pd);const R=W/2;for(let i=0;i<160;i++){const a=i/160*TAU;poly.push([R+R*Math.cos(a),R+R*Math.sin(a)])}
+    outline=`<circle cx="${f(R)}" cy="${f(R)}" r="${f(R)}"/>`}
+  else if(t==='hexagon'){W=Math.max(10,p.pd);H=W*Math.sqrt(3)/2;for(let i=0;i<6;i++){const a=i*60*D2R;poly.push([W/2+W/2*Math.cos(a),H/2+W/2*Math.sin(a)])}
+    outline=`<path d="M${poly.map(q=>f(q[0])+' '+f(q[1])).join(' L')} Z"/>`}
+  else if(t==='triangle'){W=Math.max(10,p.pd);H=W*Math.sqrt(3)/2;
+    ({poly,outline}=roundPoly([[W/2,0],[W,H],[0,H]],p.pr))}
+  else if(t==='pentagon'){const R=Math.max(10,p.pd)/2;W=2*R*Math.sin(72*D2R);H=R*(1+Math.cos(36*D2R));
+    const V=[];for(let i=0;i<5;i++){const a=(-90+72*i)*D2R;V.push([W/2+R*Math.cos(a),R+R*Math.sin(a)])}
+    ({poly,outline}=roundPoly(V,p.pr))}
+  else{W=H=Math.max(10,p.pd);const R=W/2/Math.cos(Math.PI/8);for(let i=0;i<8;i++){const a=(22.5+i*45)*D2R;poly.push([W/2+R*Math.cos(a),H/2+R*Math.sin(a)])}
+    outline=`<path d="M${poly.map(q=>f(q[0])+' '+f(q[1])).join(' L')} Z"/>`}
+  const hs=halfplanes(poly);
+  const dist=(x,y)=>{let d=1e9;for(const h of hs){const v=h.nx*x+h.ny*y-h.c;if(v<d)d=v}return d};
+  return {type:t,W,H,cx:W/2,cy:t==='triangle'?H*2/3:t==='pentagon'?Math.max(10,p.pd)/2:H/2,poly,hs,dist,outline,maxR:Math.hypot(W/2,H/2)};
+}
+// convex polygon (clockwise on screen) with filleted corners -> sampled poly + exact arc outline
+function roundPoly(V,r){
+  const n=V.length;let minE=1e9;for(let i=0;i<n;i++){const a=V[i],b=V[(i+1)%n];minE=Math.min(minE,Math.hypot(b[0]-a[0],b[1]-a[1]))}
+  const corners=V.map((v,i)=>{const a=V[(i-1+n)%n],b=V[(i+1)%n];
+    let ux=a[0]-v[0],uy=a[1]-v[1],wx=b[0]-v[0],wy=b[1]-v[1];let L=Math.hypot(ux,uy);ux/=L;uy/=L;L=Math.hypot(wx,wy);wx/=L;wy/=L;
+    return {v,ux,uy,wx,wy,h:Math.acos(Math.max(-1,Math.min(1,ux*wx+uy*wy)))/2}});
+  let rc=Math.max(0,r);for(const c of corners)rc=Math.min(rc,minE*0.45*Math.tan(c.h));
+  if(rc<=0.01)return {poly:V,outline:`<path d="M${V.map(q=>f(q[0])+' '+f(q[1])).join(' L')} Z"/>`};
+  const poly=[];let d='';
+  corners.forEach(({v,ux,uy,wx,wy,h},i)=>{
+    let bx=ux+wx,by=uy+wy;const bl=Math.hypot(bx,by);bx/=bl;by/=bl;
+    const td=rc/Math.tan(h),cd=rc/Math.sin(h);
+    const c=[v[0]+bx*cd,v[1]+by*cd],t1=[v[0]+ux*td,v[1]+uy*td],t2=[v[0]+wx*td,v[1]+wy*td];
+    let a1=Math.atan2(t1[1]-c[1],t1[0]-c[0]),a2=Math.atan2(t2[1]-c[1],t2[0]-c[0]);
+    while(a2-a1>Math.PI)a2-=TAU;while(a1-a2>Math.PI)a2+=TAU;
+    for(let k=0;k<=12;k++){const a=a1+(a2-a1)*k/12;poly.push([c[0]+rc*Math.cos(a),c[1]+rc*Math.sin(a)])}
+    d+=(i?' L':'M')+f(t1[0])+' '+f(t1[1])+` A${f(rc)} ${f(rc)} 0 0 1 `+f(t2[0])+' '+f(t2[1])});
+  return {poly,outline:`<path d="${d} Z"/>`};
+}
+function clip(poly,h){const out=[];const n=poly.length;
+  for(let i=0;i<n;i++){const a=poly[i],b=poly[(i+1)%n];
+    const da=h.nx*a[0]+h.ny*a[1]-h.c,db=h.nx*b[0]+h.ny*b[1]-h.c;
+    if(da>=0)out.push(a);
+    if((da>=0)!==(db>=0)){const t=da/(da-db);out.push([a[0]+(b[0]-a[0])*t,a[1]+(b[1]-a[1])*t])}}
+  return out}
+function area(poly){let s=0;for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length];s+=a[0]*b[1]-b[0]*a[1]}return Math.abs(s)/2}
+function centroid(poly){let A=0,cx=0,cy=0;for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length];const c=a[0]*b[1]-b[0]*a[1];A+=c;cx+=(a[0]+b[0])*c;cy+=(a[1]+b[1])*c}
+  if(Math.abs(A)<1e-12){let x=0,y=0;for(const q of poly){x+=q[0];y+=q[1]}return[x/poly.length,y/poly.length]}return[cx/(3*A),cy/(3*A)]}
+function perimeter(poly){let s=0;for(let i=0;i<poly.length;i++){const a=poly[i],b=poly[(i+1)%poly.length];s+=Math.hypot(b[0]-a[0],b[1]-a[1])}return s}
+function dedupe(poly){const o=[];for(const q of poly){const l=o[o.length-1];if(!l||Math.hypot(q[0]-l[0],q[1]-l[1])>1e-4)o.push(q)}
+  while(o.length>1&&Math.hypot(o[0][0]-o[o.length-1][0],o[0][1]-o[o.length-1][1])<=1e-4)o.pop();return o}
+
+/* ---------- size field ---------- */
+function makeScale(p,P,rng){
+  const minS=Math.max(0.05,Math.min(1,p.minScale/100));
+  const ang=p.gradAngle*D2R,dx=Math.cos(ang),dy=Math.sin(ang);
+  let pmin=1e9,pmax=-1e9;for(const[x,y]of[[0,0],[P.W,0],[0,P.H],[P.W,P.H]]){const v=x*dx+y*dy;pmin=Math.min(pmin,v);pmax=Math.max(pmax,v)}
+  const maxD=(P.type==='rect'||P.type==='none')?Math.hypot(P.W/2,P.H/2):P.W/2;
+  const nz=[];for(let i=0;i<4;i++){const a=rng()*TAU;nz.push([Math.cos(a),Math.sin(a),rng()*TAU,0.7+rng()*0.9])}
+  return (x,y)=>{let t;
+    switch(p.vary){
+      case 'none':return 1;
+      case 'random':t=rng();break;
+      case 'linear':t=((x*dx+y*dy)-pmin)/Math.max(1e-9,pmax-pmin);break;
+      case 'radial':t=1-Math.hypot(x-P.cx,y-P.cy)/maxD;break;
+      case 'wave':t=0.5+0.5*Math.sin(TAU*(x*dx+y*dy)/Math.max(1,p.wavelen));break;
+      case 'noise':{let s=0;for(const[a,b,ph,k]of nz)s+=Math.sin(TAU*k*(x*a+y*b)/Math.max(1,p.wavelen)+ph);t=0.5+s/(2*nz.length)*1.6;break}
+      default:return 1}
+    t=Math.max(0,Math.min(1,t));if(p.invert)t=1-t;return minS+(1-minS)*t};
+}
+
+/* ---------- generators ---------- */
+function generate(p){
+  const P=buildPanel(p),rng=mulberry32((p.seed|0)*2654435761>>>0||1);
+  const gap=Math.max(0.05,p.gap);
+  const marginEff=p.panel==='none'?Math.max(0,p.margin):Math.max(p.margin,gap);
+  const scale=makeScale(p,P,rng);
+  const res={P,gap,marginEff,items:[],cells:[],truncated:false};
+  if(p.layout==='cells'){genCells(p,P,res,scale,rng);return res}
+
+  let size=Math.max(0.5,p.size),R0=size/2,pitch=size+gap+Math.max(0,p.extra||0);
+  const cands=[];
+  const {W,H,cx,cy}=P;
+  const ex=gap+Math.max(0,p.extra||0),aW=W-2*marginEff,aH=H-2*marginEff;
+  if(p.fill&&(p.panel==='rect'||p.panel==='none')&&(p.layout==='grid'||p.layout==='hex')&&aW>size&&aH>size){
+    // stretch the lattice so it spans the piece edge to edge
+    if(p.layout==='grid'){
+      const n=Math.max(1,Math.round((aW+ex)/pitch)),m=Math.max(1,Math.round((aH+ex)/pitch));
+      const px=(aW+ex)/n,py=(aH+ex)/m;size=Math.min(px,py)-ex;R0=size/2;pitch=size+ex;
+      for(let j=0;j<m;j++)for(let i=0;i<n;i++)cands.push({x:cx+(i-(n-1)/2)*px,y:cy+(j-(m-1)/2)*py,par:i+j});
+    }else{
+      const n=Math.max(1,Math.round((aW+ex)/pitch-0.5)),pp=(aW+ex)/(n+0.5);size=pp-ex;R0=size/2;pitch=pp;
+      const m=Math.max(1,Math.floor((aH-size)/(pp*Math.sqrt(3)/2))+1),ry=m>1?(aH-size)/(m-1):0;
+      for(let j=0;j<m;j++)for(let i=0;i<n;i++)cands.push({x:cx-aW/2+size/2+i*pp+(j%2?pp/2:0),y:cy+(j-(m-1)/2)*ry,par:j});
+    }
+  }else if(p.layout==='grid'||p.layout==='hex'){
+    const hex=p.layout==='hex',ry=hex?pitch*Math.sqrt(3)/2:pitch;
+    const nx=Math.ceil(W/2/pitch)+2,ny=Math.ceil(H/2/ry)+2;
+    for(let j=-ny;j<=ny;j++)for(let i=-nx;i<=nx;i++){
+      const off=hex&&((j%2)+2)%2?pitch/2:0;cands.push({x:cx+i*pitch+off,y:cy+j*ry,par:hex?j:i+j})}
+  }else if(p.layout==='radial'){
+    cands.push({x:cx,y:cy,par:0});
+    const Rat=r=>p.vary==='radial'?R0*scale(cx+r,cy):R0;
+    let rPrev=0,RPrev=Rat(0),k=0;const lim=P.maxR+size;
+    while(rPrev<lim&&k<400){k++;
+      let Rk=R0,rk=rPrev+RPrev+gap+(p.extra||0)+Rk;
+      if(p.vary==='radial'){for(let it=0;it<4;it++){Rk=Rat(rk);rk=rPrev+RPrev+gap+(p.extra||0)+Rk}}
+      const need=(2*Rk+gap+(p.extra||0))/(2*rk);
+      const n=need>=1?1:Math.max(1,Math.floor(Math.PI/Math.asin(need)));
+      const tw=k*p.twist*D2R;
+      for(let i=0;i<n;i++){const a=tw+i*TAU/n;cands.push({x:cx+rk*Math.cos(a),y:cy+rk*Math.sin(a),par:i})}
+      rPrev=rk;RPrev=Rk}
+  }else if(p.layout==='spiral'){
+    const c=pitch*p.spiralK/100,g=Math.PI*(3-Math.sqrt(5));
+    for(let i=0;i<60000;i++){const r=c*Math.sqrt(i+0.5);if(r>P.maxR+size)break;const a=i*g;cands.push({x:cx+r*Math.cos(a),y:cy+r*Math.sin(a),par:i})}
+  }else if(p.layout==='scatter'){
+    const N=Math.min(120000,Math.round(W*H/(pitch*pitch)*p.density*4));
+    for(let i=0;i<N;i++)cands.push({x:rng()*W,y:rng()*H,par:0});
+  }
+  // size, rotation
+  for(const c of cands){c.r=R0*scale(c.x,c.y);c.rot=rotFor(p,c,P,rng)}
+  if(p.layout==='scatter'&&p.vary!=='none')cands.sort((a,b)=>b.r-a.r);
+
+  // greedy acceptance: inside piece + clearance to every accepted element
+  const cell=size+gap+1e-6,grid=new Map(),minR=Math.max(0,p.minFeat)/2;
+  const MAX=25000,lattice=p.layout==='grid'||p.layout==='hex';
+  for(const c of cands){
+    if(c.r<minR||c.r<0.05)continue;
+    if(P.dist(c.x,c.y)<(lattice?Math.max(c.r,R0):c.r)+marginEff-1e-9)continue;
+    const gx=Math.floor(c.x/cell),gy=Math.floor(c.y/cell);let ok=true;
+    for(let ix=gx-1;ix<=gx+1&&ok;ix++)for(let iy=gy-1;iy<=gy+1&&ok;iy++){
+      const b=grid.get(ix+','+iy);if(!b)continue;
+      for(const o of b){const need=c.r+o.r+gap;const dx=c.x-o.x,dy=c.y-o.y;if(dx*dx+dy*dy<need*need-1e-9){ok=false;break}}}
+    if(!ok)continue;
+    const key=gx+','+gy;(grid.get(key)||grid.set(key,[]).get(key)).push(c);
+    res.items.push(c);
+    if(res.items.length>=MAX){res.truncated=true;break}
+  }
+  if(p.fill)enlarge(res.items,P,gap,marginEff,size,p.vary==='none'||p.vary==='random');
+  return res;
+}
+// Grow elements into the free space without ever closing a gap below `gap`.
+// 1) scale everything by one factor (keeps any size gradient), 2) optionally let each element
+// grow on its own into leftover room (each side of a pair takes at most half the slack).
+function enlarge(items,P,gap,margin,size,individual){
+  gap+=0.001;margin+=0.001;
+  const n=items.length;if(!n)return;
+  const rMax=size*1.6,reach=2*rMax+gap,g=new Map();
+  items.forEach((c,i)=>{const k=Math.floor(c.x/reach)+','+Math.floor(c.y/reach);(g.get(k)||g.set(k,[]).get(k)).push(i)});
+  const nb=items.map((c,i)=>{const gx=Math.floor(c.x/reach),gy=Math.floor(c.y/reach),o=[];
+    for(let ix=gx-1;ix<=gx+1;ix++)for(let iy=gy-1;iy<=gy+1;iy++){const b=g.get(ix+','+iy);if(b)for(const j of b)if(j!==i){const d=Math.hypot(items[j].x-c.x,items[j].y-c.y);if(d<reach)o.push([j,d])}}
+    return o});
+  const room=items.map(c=>P.dist(c.x,c.y)-margin);
+  let k=Infinity,maxr=0;
+  items.forEach((c,i)=>{maxr=Math.max(maxr,c.r);for(const[j,d]of nb[i])if(j>i)k=Math.min(k,(d-gap)/(c.r+items[j].r))});
+  k=Math.min(k,rMax/maxr);
+  if(k>1)items.forEach((c,i)=>{c.r=Math.max(c.r,Math.min(c.r*k,room[i]))});
+  if(!individual)return;
+  for(let it=0;it<24;it++){
+    const grow=items.map((c,i)=>{let s=Math.min(room[i]-c.r,rMax-c.r);for(const[j,d]of nb[i])s=Math.min(s,(d-c.r-items[j].r-gap)/2);return Math.max(0,s)});
+    let any=0;items.forEach((c,i)=>{c.r+=grow[i];any=Math.max(any,grow[i])});if(any<0.005)break}
+}
+function rotFor(p,c,P,rng){
+  switch(p.rotMode){
+    case 'random':return rng()*360;
+    case 'radial':return Math.atan2(c.y-P.cy,c.x-P.cx)/D2R+90+p.angle;
+    case 'alternate':return p.angle+((((c.par%2)+2)%2)?180:0);
+    default:return p.angle}
+}
+function genCells(p,P,res,scale,rng){
+  const s=Math.max(3,p.cellSize),gap=res.gap,{W,H}=P;
+  // seeds over an expanded box
+  let seeds=[];
+  if(p.cellSeed==='random'){
+    const minD=s*0.82,cs=minD/Math.SQRT2,g=new Map(),N=Math.round((W+2*s)*(H+2*s)/(s*s)*30);
+    for(let i=0;i<N;i++){const x=-s+rng()*(W+2*s),y=-s+rng()*(H+2*s);const gx=Math.floor(x/cs),gy=Math.floor(y/cs);let ok=true;
+      for(let ix=gx-2;ix<=gx+2&&ok;ix++)for(let iy=gy-2;iy<=gy+2&&ok;iy++){const q=g.get(ix+','+iy);if(q&&Math.hypot(q[0]-x,q[1]-y)<minD)ok=false}
+      if(ok){g.set(gx+','+gy,[x,y]);seeds.push([x,y])}}
+  }else if(p.cellSeed==='tri'){
+    // two seeds per lattice cell (honeycomb lattice points) -> Voronoi gives triangles
+    const ry=s*Math.sqrt(3)/2,nx=Math.ceil(W/s)+4,ny=Math.ceil(H/2/ry)+4;
+    for(let j=-ny;j<=ny;j++)for(let i=-nx;i<=nx;i++){const x=P.cx+i*s+j*s/2,y=P.cy+j*ry;
+      if(x<-2*s||x>W+2*s)continue;seeds.push([x,y]);seeds.push([x+s/2,y+ry/3])}
+  }else{
+    const hex=p.cellSeed==='hex',ry=hex?s*Math.sqrt(3)/2:s;
+    const nx=Math.ceil(W/2/s)+3,ny=Math.ceil(H/2/ry)+3;
+    for(let j=-ny;j<=ny;j++)for(let i=-nx;i<=nx;i++){
+      const odd=((j%2)+2)%2;seeds.push([P.cx+i*s+(hex&&odd?s/2:0),P.cy+j*ry])}
+  }
+  const jit=p.jitter/100*s*0.5;
+  if(jit>0)seeds=seeds.map(([x,y])=>[x+(rng()*2-1)*jit,y+(rng()*2-1)*jit]);
+  seeds=seeds.filter(([x,y])=>x>-2*s&&x<W+2*s&&y>-2*s&&y<H+2*s);
+
+  // inset piece
+  let inset=P.poly.slice();
+  for(const h of P.hs)inset=clip(inset,{nx:h.nx,ny:h.ny,c:h.c+res.marginEff});
+  if(inset.length<3)return;
+  const cs=s*1.5,g=new Map();
+  seeds.forEach((q,i)=>{const k=Math.floor(q[0]/cs)+','+Math.floor(q[1]/cs);(g.get(k)||g.set(k,[]).get(k)).push(i)});
+  const raw=[];
+  let bx0=1e9,by0=1e9,bx1=-1e9,by1=-1e9;for(const[x,y]of inset){bx0=Math.min(bx0,x);by0=Math.min(by0,y);bx1=Math.max(bx1,x);by1=Math.max(by1,y)}
+  for(let i=0;i<seeds.length;i++){
+    const [px,py]=seeds[i];
+    if(px<bx0-s*1.5||px>bx1+s*1.5||py<by0-s*1.5||py>by1+s*1.5)continue;
+    const gx=Math.floor(px/cs),gy=Math.floor(py/cs),nb=[];
+    for(let ix=gx-3;ix<=gx+3;ix++)for(let iy=gy-3;iy<=gy+3;iy++){const b=g.get(ix+','+iy);if(b)for(const j of b)if(j!==i)nb.push(j)}
+    nb.sort((a,b)=>Math.hypot(seeds[a][0]-px,seeds[a][1]-py)-Math.hypot(seeds[b][0]-px,seeds[b][1]-py));
+    let poly=inset;
+    for(const j of nb){const [qx,qy]=seeds[j];let nx=qx-px,ny=qy-py;const L=Math.hypot(nx,ny);if(L<1e-9)continue;nx/=L;ny/=L;
+      const mx=(px+qx)/2,my=(py+qy)/2;
+      poly=clip(poly,{nx:-nx,ny:-ny,c:-(nx*mx+ny*my)+gap/2});if(poly.length<3)break}
+    poly=dedupe(poly);
+    if(poly.length<3)continue;
+    raw.push(poly);
+  }
+  // drop slivers relative to the typical (median) cell
+  const areas=raw.map(area).sort((a,b)=>a-b),med=areas.length?areas[areas.length>>1]:0;
+  for(let poly of raw){
+    if(area(poly)<med*p.minCell/100)continue;
+    const c=centroid(poly),k=scale(c[0],c[1]);
+    if(k<0.999)poly=poly.map(([x,y])=>[c[0]+(x-c[0])*k,c[1]+(y-c[1])*k]);
+    if(area(poly)<0.5)continue;
+    res.cells.push(poly);
+  }
+}
+
+/* ---------- SVG output ---------- */
+function elemPath(c,shape){
+  if(shape==='circle')return null;
+  const u=unitShape(shape),a=c.rot*D2R,co=Math.cos(a),si=Math.sin(a);
+  let d='';u.forEach(([x,y],i)=>{const X=c.x+c.r*(x*co-y*si),Y=c.y+c.r*(x*si+y*co);d+=(i?'L':'M')+f(X)+' '+f(Y)});return d+'Z';
+}
+function roundedCellPath(pts,rad){
+  if(rad<=0.01)return 'M'+pts.map(q=>f(q[0])+' '+f(q[1])).join('L')+'Z';
+  const n=pts.length,seg=[];
+  for(let i=0;i<n;i++){const v=pts[i],a=pts[(i-1+n)%n],b=pts[(i+1)%n];
+    let ux=a[0]-v[0],uy=a[1]-v[1],wx=b[0]-v[0],wy=b[1]-v[1];const la=Math.hypot(ux,uy),lb=Math.hypot(wx,wy);ux/=la;uy/=la;wx/=lb;wy/=lb;
+    const th=Math.acos(Math.max(-1,Math.min(1,ux*wx+uy*wy)));
+    let d=th>1e-3?rad/Math.tan(th/2):0;d=Math.min(d,la/2,lb/2);
+    seg.push([[v[0]+ux*d,v[1]+uy*d],v,[v[0]+wx*d,v[1]+wy*d]])}
+  let s='M'+f(seg[n-1][2][0])+' '+f(seg[n-1][2][1]);
+  for(const[p1,v,p2]of seg)s+='L'+f(p1[0])+' '+f(p1[1])+'Q'+f(v[0])+' '+f(v[1])+' '+f(p2[0])+' '+f(p2[1]);
+  return s+'Z';
+}
+function buildSVG(p,res,mode){
+  const {P}=res,W=P.W,H=P.H;
+  let inner=[],cutLen=0;
+  if(p.layout==='cells'){
+    for(const poly of res.cells){inner.push(`<path d="${roundedCellPath(poly,Math.max(0,p.round))}"/>`);cutLen+=perimeter(poly)}
+  }else{
+    const sh=p.shape;const per=sh==='circle'?TAU:perimeter(unitShape(sh));
+    for(const c of res.items){const d=elemPath(c,sh);inner.push(d?`<path d="${d}"/>`:`<circle cx="${f(c.x)}" cy="${f(c.y)}" r="${f(c.r)}"/>`);cutLen+=per*c.r}
+  }
+  const showOutline=p.panel!=='none'&&p.cutOutline;
+  if(showOutline)cutLen+=perimeter(P.poly);
+  const count=inner.length;
+  let body;
+  if(mode==='export'){
+    body=`<g id="inner-cuts" fill="none" stroke="#ff0000" stroke-width="0.1">\n${inner.join('\n')}\n</g>`+
+      (showOutline?`\n<g id="outline-cut" fill="none" stroke="#0000ff" stroke-width="0.1">\n${P.outline}\n</g>`:'');
+    return {svg:`<?xml version="1.0" encoding="UTF-8"?>\n<!-- Patternsmith · units mm · red = inner cuts (cut first), blue = outline (cut last) -->\n<svg xmlns="http://www.w3.org/2000/svg" width="${f(W)}mm" height="${f(H)}mm" viewBox="0 0 ${f(W)} ${f(H)}">\n${body}\n</svg>`,count,cutLen};
+  }
+  const pad=Math.max(W,H)*0.02;
+  const vb=`${f(-pad)} ${f(-pad)} ${f(W+2*pad)} ${f(H+2*pad)}`;
+  if(mode==='material'){
+    const sheet=p.panel==='none'?`<rect x="0" y="0" width="${f(W)}" height="${f(H)}"/>`:P.outline;
+    body=`<g fill="#d8b98a" stroke="#a9875a" stroke-width="1" vector-effect="non-scaling-stroke">${sheet.replace('/>',' vector-effect="non-scaling-stroke"/>')}</g>`+
+      `<g fill="#2b2926" stroke="#6b4a2a" stroke-width="0.8">${inner.join('').replace(/\/>/g,' vector-effect="non-scaling-stroke"/>')}</g>`;
+  }else{
+    body=`<rect x="0" y="0" width="${f(W)}" height="${f(H)}" fill="none" stroke="#ddd" stroke-dasharray="4 4" vector-effect="non-scaling-stroke"/>`+
+      `<g fill="none" stroke="#e11d1d" stroke-width="1">${inner.join('').replace(/\/>/g,' vector-effect="non-scaling-stroke"/>')}</g>`+
+      (showOutline?`<g fill="none" stroke="#1d4ed8" stroke-width="1.2">${P.outline.replace('/>',' vector-effect="non-scaling-stroke"/>')}</g>`:'');
+  }
+  return {svg:`<svg xmlns="http://www.w3.org/2000/svg" viewBox="${vb}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:100%">${body}</svg>`,count,cutLen};
+}
+
+/* ---------- UI ---------- */
+let view='material',last=null;
+const DEFAULTS={panel:'rect',pw:300,ph:200,pd:150,pr:6,margin:8,layout:'grid',cellSeed:'hex',cellSize:20,jitter:0,round:2,minCell:30,
+  extra:0,twist:0,spiralK:58,density:8,shape:'circle',size:14,rotMode:'fixed',angle:0,minFeat:2,gap:2.5,
+  vary:'none',minScale:35,gradAngle:0,wavelen:120,invert:false,fill:true,cutOutline:true};
+const presets={
+  'Honeycomb coaster':{panel:'circle',pd:100,margin:5,layout:'cells',cellSeed:'hex',cellSize:13,jitter:0,round:1.5,minCell:55,gap:2.5,vary:'none',cutOutline:true},
+  'Organic Voronoi panel':{panel:'rect',pw:300,ph:200,pr:10,margin:10,layout:'cells',cellSeed:'random',cellSize:22,round:3,minCell:30,gap:3,vary:'linear',minScale:45,gradAngle:0,invert:false},
+  'Teardrop mandala':{panel:'circle',pd:200,margin:6,layout:'radial',shape:'teardrop',size:11,gap:2,extra:0,rotMode:'radial',angle:180,twist:0,vary:'radial',minScale:45,invert:true,minFeat:3},
+  'Sunflower spiral':{panel:'circle',pd:180,margin:6,layout:'spiral',shape:'circle',size:9,gap:1.6,spiralK:58,vary:'radial',minScale:35,invert:true,minFeat:2.5},
+  'Starfield':{panel:'rect',pw:300,ph:200,pr:6,margin:8,layout:'scatter',shape:'star',size:18,gap:2.5,density:10,rotMode:'random',vary:'random',minScale:20,minFeat:4},
+  'Halftone dot screen':{panel:'rect',pw:300,ph:200,pr:0,margin:8,layout:'hex',shape:'circle',size:10,gap:1.5,extra:0,vary:'linear',minScale:15,gradAngle:0,invert:false,minFeat:2},
+  'Hex tile lamp shade':{panel:'rect',pw:280,ph:160,pr:0,margin:10,layout:'hex',shape:'hexagon',size:14,gap:2,rotMode:'fixed',angle:30,vary:'wave',minScale:40,wavelen:140,gradAngle:90,minFeat:3},
+  'Triangle pennant':{panel:'triangle',pd:220,pr:8,margin:8,layout:'cells',cellSeed:'tri',cellSize:16,jitter:0,round:1.5,minCell:60,gap:2.5,vary:'radial',minScale:45,invert:false},
+  'Pentagon star field':{panel:'pentagon',pd:200,pr:10,margin:8,layout:'radial',shape:'star',size:12,gap:2.2,extra:0,rotMode:'radial',angle:0,twist:12,vary:'radial',minScale:40,invert:false,minFeat:3},
+  'Moroccan cross screen':{layout:'grid',shape:'cross',size:18,gap:2.5,rotMode:'fixed',angle:45,margin:10},
+  'Leaf canopy':{layout:'scatter',shape:'leaf',size:24,gap:2,density:14,rotMode:'random',vary:'noise',minScale:30,wavelen:160,minFeat:5},
+  'Rain window':{pw:200,ph:300,pr:4,layout:'hex',shape:'slot',size:14,gap:2.5,vary:'linear',gradAngle:90,minScale:20,minFeat:3},
+  'Crescent mandala':{panel:'circle',pd:180,margin:6,layout:'radial',shape:'moon',size:12,gap:2,rotMode:'radial',angle:90,twist:8,vary:'radial',minScale:45,invert:true,minFeat:3},
+  'Bubble pond':{panel:'circle',pd:200,margin:6,layout:'scatter',shape:'circle',size:20,gap:2,density:16,vary:'random',minScale:12,minFeat:2},
+  'Diamond lantern wrap':{pw:300,ph:150,pr:0,margin:8,layout:'hex',shape:'diamond',size:16,gap:2,vary:'wave',gradAngle:0,wavelen:100,minScale:35,minFeat:3},
+  'Cracked earth':{margin:8,layout:'cells',cellSeed:'random',cellSize:14,round:0.6,gap:1.8,minCell:25,vary:'noise',minScale:55,wavelen:140},
+  'Stepping stones':{panel:'octagon',pd:220,margin:10,layout:'cells',cellSeed:'random',cellSize:32,round:7,gap:5,minCell:35},
+  'Tile coaster':{pw:100,ph:100,pr:8,margin:6,layout:'cells',cellSeed:'square',cellSize:14,round:2.5,gap:2.5,minCell:60},
+  'Snowflake hexagon':{panel:'hexagon',pd:200,margin:8,layout:'radial',shape:'star6',size:12,gap:2.2,rotMode:'radial',twist:0,vary:'radial',minScale:45,minFeat:3},
+  'Pinwheel triangles':{panel:'hexagon',pd:180,margin:6,layout:'hex',shape:'triangle',size:13,gap:1.8,rotMode:'alternate',angle:0,minFeat:3},
+  'Heart wreath coaster':{panel:'circle',pd:100,margin:5,layout:'radial',shape:'heart',size:9,gap:1.8,rotMode:'radial',angle:180,twist:15,minFeat:3},
+  'Dragon scales':{pw:300,ph:200,pr:10,layout:'hex',shape:'teardrop',size:13,gap:2,rotMode:'fixed',angle:180,vary:'noise',minScale:60,wavelen:200,minFeat:3},
+  'Peacock spiral':{panel:'circle',pd:200,margin:6,layout:'spiral',shape:'teardrop',size:11,gap:1.8,spiralK:62,rotMode:'radial',angle:0,vary:'radial',minScale:30,invert:true,minFeat:3},
+  'Square pixel fade':{pw:300,ph:200,pr:0,layout:'grid',shape:'square',size:10,gap:1.5,vary:'radial',minScale:15,invert:false,minFeat:1.5},
+  'Octagon tile floor':{panel:'rect',pw:240,ph:240,pr:0,layout:'grid',shape:'octagon',size:20,gap:3,minFeat:3},
+  'Heart scatter':{panel:'hexagon',pd:180,margin:6,layout:'scatter',shape:'heart',size:16,gap:2,density:12,rotMode:'random',vary:'random',minScale:30,minFeat:4},
+};
+const pre=$('#presets');
+for(const name of Object.keys(presets)){const b=document.createElement('button');b.type='button';b.textContent=name;
+  b.onclick=()=>{setParams({...DEFAULTS,...presets[name]});syncUI();schedule()};pre.appendChild(b)}
+
+function syncUI(){
+  const p=readParams();
+  $('#pdLabel').textContent=p.panel==='triangle'?'Side length':'Diameter';
+  for(const el of $$('[data-panel]'))el.hidden=!el.dataset.panel.split(' ').includes(p.panel);
+  for(const el of $$('[data-layout]'))el.hidden=!el.dataset.layout.split(' ').includes(p.layout);
+  for(const el of $$('[data-vary]'))el.hidden=!el.dataset.vary.split(' ').includes(p.vary);
+  for(const el of $$('input[type=range]')){const o=el.parentElement.querySelector('output');if(!o)continue;
+    const k=el.dataset.k;o.textContent=el.value+((k==='angle'||k==='gradAngle'||k==='twist')?'°':(k==='density'||k==='spiralK')?'':'%')}
+}
+let pending=false;
+function schedule(){if(pending)return;pending=true;requestAnimationFrame(()=>{pending=false;render()})}
+function render(){
+  const p=readParams();
+  const t0=performance.now();
+  const res=generate(p);
+  const out=buildSVG(p,res,view==='material'?'material':'cut');
+  $('#preview').innerHTML=out.svg;
+  $('#preview').classList.toggle('cutview',view==='cut');
+  last={p,res};
+  const mn=$('#marginNote');
+  if(p.panel!=='none'&&p.margin<res.gap){mn.hidden=false;mn.textContent=`Margin raised to ${res.gap} mm so nothing gets closer to the outline than the gap.`}else mn.hidden=true;
+  const web=res.gap-p.kerf, mins=out.cutLen/Math.max(1,p.speed)/60;
+  const webBadge=web<1?`<span class="badge warn">⚠ Bridges ≈ ${f(web)} mm after kerf, fragile</span>`:`<span class="badge">✓ No touching: every bridge ≥ ${f(res.gap)} mm (≈ ${f(web)} mm after kerf)</span>`;
+  $('#stats').innerHTML=`${webBadge}<span>Shapes <b>${out.count.toLocaleString()}</b>${res.truncated?' (capped)':''}</span>`+
+    `<span>Piece <b>${f(res.P.W)} × ${f(res.P.H)}</b> mm</span><span>Cut length <b>${(out.cutLen/1000).toFixed(2)}</b> m</span>`+
+    `<span>≈ <b>${mins<1?'<1':Math.round(mins)}</b> min at ${p.speed} mm/s</span>`;
+}
+function exportSVG(){if(!last)return null;return buildSVG(last.p,last.res,'export').svg}
+function fileName(){const p=last.p;return `patternsmith-${p.layout==='cells'?p.cellSeed+'-cells':p.shape+'-'+p.layout}-${Math.round(last.res.P.W)}x${Math.round(last.res.P.H)}mm.svg`}
+
+function toast(msg){const t=$('#toast');t.textContent=msg;t.classList.add('show');clearTimeout(toast._t);toast._t=setTimeout(()=>t.classList.remove('show'),2200)}
+
+$('#controls').addEventListener('input',()=>{syncUI();schedule()});
+$('#controls').addEventListener('change',()=>{syncUI();schedule()});
+$('#reroll').onclick=()=>{$('[data-k="seed"]').value=Math.floor(Math.random()*99999);schedule()};
+$$('#viewSeg button').forEach(b=>b.onclick=()=>{view=b.dataset.view;$$('#viewSeg button').forEach(x=>x.classList.toggle('on',x===b));schedule()});
+$('#copyBtn').onclick=async()=>{const s=exportSVG();if(!s)return;
+  try{await navigator.clipboard.writeText(s);toast('SVG copied — paste into a .svg file or LightBurn')}
+  catch(e){const ta=document.createElement('textarea');ta.value=s;document.body.appendChild(ta);ta.select();let ok=false;try{ok=document.execCommand('copy')}catch(_){}ta.remove();toast(ok?'SVG copied':'Copy was blocked by the browser')}};
+
+let downloads=null;
+(async()=>{try{if(window.claude&&window.claude.use){downloads=await window.claude.use('downloads');if(downloads)$('#dlBtn').hidden=false}}catch(e){}})();
+$('#dlBtn').onclick=async()=>{const s=exportSVG();if(!s||!downloads)return;
+  try{const r=await downloads.save({filename:fileName(),data:s});if(r&&r.status==='saved')toast('Saved '+fileName())}
+  catch(e){const c=e&&e.code;if(c==='declined')return;if(c==='rate_limited'){toast('One moment — a save prompt is already open');return}
+    if(['unavailable','not_granted','capability_disabled','capability_removed'].includes(c))$('#dlBtn').hidden=true;
+    toast('Download unavailable here — use Copy SVG')}};
+
+setParams({...DEFAULTS,...presets['Honeycomb coaster']});
+syncUI();render();
+})();
+</script>
+</body>
+</html>
